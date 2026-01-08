@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>Dashboard Financeiro</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<style>
+body{margin:0;font-family:Arial;background:#071a2b;color:#fff}
+header{background:#0b2d4d;padding:20px;text-align:center;font-size:26px;font-weight:bold}
+.container{display:grid;grid-template-columns:260px 1fr 320px;gap:15px;padding:15px}
+.sidebar,.card{background:#0b2d4d;border-radius:12px;padding:15px;resize:both;overflow:auto}
+.main{display:grid;gap:15px}
+.bottom{display:grid;grid-template-columns:1fr 1fr;gap:15px}
+input,select,button{width:100%;padding:8px;border-radius:6px;border:none;margin-bottom:6px}
+button{cursor:pointer}
+.btn-green{background:#2ecc71;color:#fff}
+.btn-red{background:#e74c3c;color:#fff}
+.filter-box{background:#fff;color:#000;border-radius:10px;padding:10px;margin-bottom:10px}
+.box-green{background:#2ecc71;border-radius:12px;padding:15px;margin-bottom:10px}
+.box-red{background:#e74c3c;border-radius:12px;padding:15px;margin-bottom:10px}
+.value{font-size:28px;font-weight:bold}
+.reserva-box{background:#27ae60;border-radius:12px;padding:15px;margin-bottom:10px}
+.hidden{display:none}
+</style>
+</head>
+
+<body>
+
+<header>DASHBOARD FINANCEIRO</header>
+
+<div class="container">
+
+<!-- FILTROS -->
+<div class="sidebar">
+  <div class="filter-box">
+    <h4>Ano</h4>
+    <select id="ano"></select>
+  </div>
+  <div class="filter-box">
+    <h4>Mês</h4>
+    <select id="mes">
+      <option>Janeiro</option><option>Fevereiro</option><option>Março</option>
+      <option>Abril</option><option>Maio</option><option>Junho</option>
+      <option>Julho</option><option>Agosto</option><option>Setembro</option>
+      <option>Outubro</option><option>Novembro</option><option>Dezembro</option>
+    </select>
+  </div>
+</div>
+
+<!-- CENTRO -->
+<div class="main">
+
+<div class="card">
+  <h3>Resumo Mensal</h3>
+  <canvas id="graficoMensal"></canvas>
+</div>
+
+<div class="bottom">
+<div class="card">
+<h3>Fontes de Receita</h3>
+<input id="rf1" placeholder="Fonte 1"><input id="rv1" type="number">
+<input id="rf2" placeholder="Fonte 2"><input id="rv2" type="number">
+<input id="rf3" placeholder="Fonte 3"><input id="rv3" type="number">
+<button class="btn-green" onclick="atualizar()">Atualizar</button>
+<button class="btn-red" onclick="limparMes()">Limpar dados do mês</button>
+</div>
+
+<div class="card">
+<h3>Gráfico de Receitas</h3>
+<canvas id="graficoReceita"></canvas>
+</div>
+</div>
+
+<div class="bottom">
+<div class="card"><h3>Despesas Fixas</h3><div id="fixas"></div></div>
+<div class="card"><h3>Despesas Variáveis</h3><div id="variaveis"></div></div>
+</div>
+
+<div class="card">
+<h3>Gráfico de Despesas</h3>
+<button class="btn-green" onclick="toggleGraficoDespesas()">Mostrar / Esconder</button>
+<canvas id="graficoDespesa"></canvas>
+</div>
+
+</div>
+
+<!-- DIREITA -->
+<div>
+<div class="box-green"><h3>Receita do mês</h3><div id="totalReceita" class="value">0</div></div>
+<div class="box-red"><h3>Despesa do mês</h3><div id="totalDespesa" class="value">0</div></div>
+<div class="box-green"><h3>Saldo do mês</h3><div id="saldo" class="value">0</div></div>
+
+<div class="reserva-box">
+<h3>Reserva (Mês)</h3>
+<input id="addReserva" type="number" placeholder="Adicionar">
+<input id="retiraReserva" type="number" placeholder="Retirar">
+<div class="value">Total: <span id="reservaMes">0</span></div>
+</div>
+
+<div class="reserva-box">
+<h3>Cofre (Total)</h3>
+<div class="value"><span id="cofre">0</span></div>
+</div>
+</div>
+
+</div>
+
+<script>
+let grafReceita,grafDespesa,grafResumo;
+
+for(let a=2024;a<=2100;a++) ano.innerHTML+=`<option>${a}</option>`;
+
+function criarCampos(id,q){
+  const el=document.getElementById(id);
+  for(let i=0;i<q;i++) el.innerHTML+=`<input placeholder="Nome"><input type="number">`;
+}
+criarCampos("fixas",6);
+criarCampos("variaveis",10);
+
+function keyMes(){ return `finance_${ano.value}_${mes.value}` }
+
+function recalcularCofre(){
+  let total=0;
+  for(let k in localStorage){
+    if(k.startsWith("finance_")){
+      const d=JSON.parse(localStorage.getItem(k));
+      if(d?.reservaMes) total+=d.reservaMes;
+    }
+  }
+  cofre.innerText=total.toFixed(2);
+}
+
+function atualizar(){
+  let dados = JSON.parse(localStorage.getItem(keyMes())) || {};
+
+  const receitas=[+rv1.value||0,+rv2.value||0,+rv3.value||0];
+  const fix=[...fixas.querySelectorAll("input[type=number]")].map(v=>+v.value||0);
+  const vari=[...variaveis.querySelectorAll("input[type=number]")].map(v=>+v.value||0);
+
+  let reservaAtual = dados.reservaMes || 0;
+  reservaAtual += +addReserva.value||0;
+  reservaAtual -= +retiraReserva.value||0;
+  if(reservaAtual<0) reservaAtual=0;
+
+  const totalR = receitas.reduce((a,b)=>a+b,0);
+  const totalD = [...fix,...vari].reduce((a,b)=>a+b,0);
+  const saldoMes = totalR-totalD-reservaAtual;
+
+  totalReceita.innerText=totalR.toFixed(2);
+  totalDespesa.innerText=totalD.toFixed(2);
+  saldo.innerText=saldoMes.toFixed(2);
+  reservaMes.innerText=reservaAtual.toFixed(2);
+
+  localStorage.setItem(keyMes(),JSON.stringify({
+    receitas,fix,vari,totalR,totalD,saldoMes,reservaMes:reservaAtual
+  }));
+
+  recalcularCofre();
+  desenharGraficos(receitas,fix,vari,totalR,totalD);
+
+  addReserva.value="";
+  retiraReserva.value="";
+}
+
+function desenharGraficos(receitas,fix,vari,totalR,totalD){
+  if(grafResumo) grafResumo.destroy();
+  grafResumo=new Chart(graficoMensal,{type:"bar",
+    data:{labels:["Receita","Despesa"],
+    datasets:[{data:[totalR,totalD],backgroundColor:["#2ecc71","#e74c3c"]}]}
+  });
+
+  if(grafReceita) grafReceita.destroy();
+  grafReceita=new Chart(graficoReceita,{type:"bar",
+    data:{labels:["Fonte 1","Fonte 2","Fonte 3"],
+    datasets:[{data:receitas,backgroundColor:"#2ecc71"}]}
+  });
+
+  if(grafDespesa) grafDespesa.destroy();
+  grafDespesa=new Chart(graficoDespesa,{type:"bar",
+    data:{labels:["Fixas","Variáveis"],
+    datasets:[{data:[
+      fix.reduce((a,b)=>a+b,0),
+      vari.reduce((a,b)=>a+b,0)
+    ],backgroundColor:"#e74c3c"}]}
+  });
+}
+
+function carregar(){
+  document.querySelectorAll("input[type=number]").forEach(i=>i.value="");
+  const d=JSON.parse(localStorage.getItem(keyMes()));
+  if(d){
+    [rv1,rv2,rv3].forEach((v,i)=>v.value=d.receitas[i]||0);
+    d.fix?.forEach((v,i)=>fixas.querySelectorAll("input[type=number]")[i].value=v);
+    d.vari?.forEach((v,i)=>variaveis.querySelectorAll("input[type=number]")[i].value=v);
+    totalReceita.innerText=d.totalR.toFixed(2);
+    totalDespesa.innerText=d.totalD.toFixed(2);
+    saldo.innerText=d.saldoMes.toFixed(2);
+    reservaMes.innerText=d.reservaMes.toFixed(2);
+    desenharGraficos(d.receitas,d.fix,d.vari,d.totalR,d.totalD);
+  }else{
+    totalReceita.innerText="0";
+    totalDespesa.innerText="0";
+    saldo.innerText="0";
+    reservaMes.innerText="0";
+  }
+  recalcularCofre();
+}
+
+function limparMes(){
+  localStorage.removeItem(keyMes());
+  carregar();
+}
+
+function toggleGraficoDespesas(){
+  graficoDespesa.classList.toggle("hidden");
+}
+
+ano.onchange=carregar;
+mes.onchange=carregar;
+carregar();
+</script>
+
+</body>
+</html>
